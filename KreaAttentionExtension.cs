@@ -27,7 +27,7 @@ public class KreaAttentionExtension : Extension
             Description: "Global intensity multiplier for prompt weights.",
             Default: "1.0",
             Min: 0.0,
-            Max: 10.0,
+            Max: 3.0,
             Step: 0.05,
             ViewType: ParamViewType.SLIDER,
             Group: T2IParamTypes.GroupSampling
