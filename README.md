@@ -42,7 +42,7 @@ If you are installing or testing manually, clone this repository directly into y
 ```bash
 cd SwarmUI/src/Extensions/
 git clone [https://github.com/TimothyDudorov/KreaAttentionExtension.git](https://github.com/TimothyDudorov/KreaAttentionExtension.git)
-
+```
 ---
 
 ## How to Use
