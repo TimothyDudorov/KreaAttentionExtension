@@ -1,4 +1,3 @@
-using Newtonsoft.Json.Linq;
 using SwarmUI.Builtin_ComfyUIBackend;
 using SwarmUI.Core;
 using SwarmUI.Text2Image;
@@ -12,14 +11,14 @@ public class KreaAttentionExtension : Extension
 
     public override void OnInit()
     {
-        // Tell Swarm to recognize this custom ComfyUI node type
         ComfyUIBackendExtension.NodeToFeatureMap["Krea2PromptWeight"] = "krea_attention";
 
         WeightEnabledParam = T2IParamTypes.Register<bool>(new(
             Name: "Krea Attention Weighting",
             Description: "Enables Kijai's attention value scaling for Krea 2 prompts.",
             Default: "false",
-            Group: T2IParamTypes.GroupSampling
+            Group: T2IParamTypes.GroupSampling,
+            FeatureFlag: "krea_attention" // <-- was missing; ties param visibility to NodeToFeatureMap
         ));
 
         WeightStrengthParam = T2IParamTypes.Register<double>(new(
@@ -30,10 +29,12 @@ public class KreaAttentionExtension : Extension
             Max: 3.0,
             Step: 0.05,
             ViewType: ParamViewType.SLIDER,
-            Group: T2IParamTypes.GroupSampling
+            Group: T2IParamTypes.GroupSampling,
+            FeatureFlag: "krea_attention" // <-- same
         ));
 
-        // Inject our modifier into the model generation pipeline
+        // Phase 1 — model loading. LoRA runs at ModelGenStep priority -10, so LoadingClip
+        // is already LoRA-resolved by the time this fires at -6.
         WorkflowGenerator.AddModelGenStep(g =>
         {
             if (g.UserInput.TryGet(WeightEnabledParam, out bool enabled) && enabled)
@@ -42,5 +43,16 @@ public class KreaAttentionExtension : Extension
                 KreaGraphModifier.ApplyAttentionScaling(g, strength);
             }
         }, priority: -6);
+
+        // Phase 2 — main pipeline. Must run AFTER the built-in Positive Prompt step
+        // (AddStep priority -8), and BEFORE ControlNet/region/style/reference steps
+        // (priority -7 and later) that expect to compose on top of FinalPrompt.
+        WorkflowGenerator.AddStep(g =>
+        {
+            if (g.UserInput.TryGet(WeightEnabledParam, out bool enabled) && enabled)
+            {
+                KreaGraphModifier.ApplyStashedConditioning(g);
+            }
+        }, priority: -7.9);
     }
 }
