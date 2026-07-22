@@ -1,40 +1,52 @@
 using Newtonsoft.Json.Linq;
 using SwarmUI.Builtin_ComfyUIBackend;
 using SwarmUI.Text2Image;
+using SwarmUI.Utils;
 
 namespace SwarmExtensions.KreaAttention;
 
 public static class KreaGraphModifier
 {
-    // Hands the conditioning node id from the model-loading phase (ModelGenStep) to the
-    // prompt-encoding phase (AddStep). Needed because g.FinalPrompt set during model
-    // loading gets unconditionally overwritten by Swarm's own "Positive Prompt" step
-    // (WorkflowGeneratorSteps.cs, AddStep priority -8) which runs afterward.
     private const string CondNodeHelperKey = "krea_attention_cond_node";
 
-    /// <summary>ModelGenStep phase. Must run here (not later) so the MODEL patch is
-    /// captured into g.CurrentModel before CreateModelLoader returns.</summary>
     public static void ApplyAttentionScaling(WorkflowGenerator g, float strength)
     {
+        string text = g.UserInput.Get(T2IParamTypes.Prompt);
+
         string customNodeId = g.CreateNode("Krea2PromptWeight", new JObject()
         {
             ["model"] = g.LoadingModel,
             ["clip"] = g.LoadingClip,
-            ["text"] = g.UserInput.Get(T2IParamTypes.Prompt),
+            ["text"] = text,
             ["strength"] = strength
         });
 
-        g.LoadingModel = new JArray(customNodeId, 0); // MODEL — apply now
-        g.NodeHelpers[CondNodeHelperKey] = customNodeId; // CONDITIONING — apply later
+        Logs.Debug($"[KreaAttention] Created Krea2PromptWeight node '{customNodeId}' " +
+            $"(strength={strength}), model input={g.LoadingModel}, clip input={g.LoadingClip}. " +
+            $"Prompt text passed through: \"{text}\"");
+
+        g.LoadingModel = new JArray(customNodeId, 0);
+        g.NodeHelpers[CondNodeHelperKey] = customNodeId;
+
+        Logs.Debug($"[KreaAttention] LoadingModel set to [{customNodeId}, 0]; " +
+            $"conditioning node stashed under '{CondNodeHelperKey}' for later application.");
     }
 
-    /// <summary>AddStep phase, run after Swarm's built-in positive-prompt encode
-    /// (priority -8) so this actually wins instead of being clobbered by it.</summary>
     public static void ApplyStashedConditioning(WorkflowGenerator g)
     {
         if (g.NodeHelpers.TryGetValue(CondNodeHelperKey, out string customNodeId))
         {
+            JArray priorFinalPrompt = g.FinalPrompt;
             g.FinalPrompt = new JArray(customNodeId, 1);
+            Logs.Debug($"[KreaAttention] FinalPrompt overridden: {priorFinalPrompt} -> {g.FinalPrompt}");
+        }
+        else
+        {
+            // Toggle was on for this step but no stashed node was found -- means the
+            // ModelGenStep phase didn't run or didn't stash anything. Should not happen
+            // if both steps check the same T2IParam, but worth knowing if it does.
+            Logs.Warning("[KreaAttention] Krea attention weighting step ran, but no stashed " +
+                "conditioning node was found. FinalPrompt was left unmodified.");
         }
     }
 }

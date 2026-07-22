@@ -32,6 +32,19 @@ public class KreaAttentionExtension : Extension
             Group: T2IParamTypes.GroupSampling,
             FeatureFlag: "krea_attention" // <-- same
         ));
+        
+        // Diagnostic only: confirms what's actually wired into the sampler after every other
+        // step (ControlNet, regions, styles, IPAdapter, etc.) has had a chance to touch FinalPrompt
+        // or CurrentModel. Priority 0 is safely after prompt/model steps (which top out around -3/-4)
+        // and before the Sampler region (which starts later in the file).
+        WorkflowGenerator.AddStep(g =>
+        {
+            if (g.UserInput.TryGet(WeightEnabledParam, out bool enabled) && enabled)
+            {
+                Logs.Debug($"[KreaAttention] Pre-sampler check: FinalPrompt={g.FinalPrompt}, " +
+                    $"CurrentModel={g.CurrentModel?.Path}");
+            }
+        }, priority: 0);
 
         // Phase 1 — model loading. LoRA runs at ModelGenStep priority -10, so LoadingClip
         // is already LoRA-resolved by the time this fires at -6.
