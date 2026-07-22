@@ -42,8 +42,15 @@ public class KreaAttentionExtension : Extension
         {
             if (g.UserInput.TryGet(WeightEnabledParam, out bool enabled) && enabled)
             {
-                Logs.Debug($"[KreaAttention] Pre-sampler check: FinalPrompt={g.FinalPrompt}, " +
-                    $"CurrentModel={g.CurrentModel?.Path}");
+                Logs.Debug($"[KreaAttention] Pre-sampler check: FinalPrompt={g.FinalPrompt}, CurrentModel={g.CurrentModel?.Path}");
+                if (g.FinalPrompt != null && g.Workflow.TryGetValue(g.FinalPrompt[0].ToString(), out var condNode))
+                {
+                    Logs.Debug($"[KreaAttention] Node {g.FinalPrompt[0]} (FinalPrompt) inputs: {condNode["inputs"]}");
+                }
+                if (g.CurrentModel != null && g.Workflow.TryGetValue(g.CurrentModel.Path[0].ToString(), out var modelNode))
+                {
+                    Logs.Debug($"[KreaAttention] Node {g.CurrentModel.Path[0]} (CurrentModel) inputs: {modelNode["inputs"]}");
+                }
             }
         }, priority: 0);
 
